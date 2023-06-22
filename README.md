@@ -9,3 +9,5 @@
 ``` shell
 python ./image_classifier/get_classifier_data.py -m /hpc_input_export/人为活动.json -a /hpc_input_export/物种图片.json -n /hpc_input_export/空白图片.json
 ```
+
+该脚本能够把存储在服务器上的图片下载到本地（且检查对应的图片是否损坏）。对应的每个大类的图片的说明会保留在对应的本地路径的json文件

@@ -1,6 +1,13 @@
 import json
 import hashlib
 import argparse
+import shutil
+from PIL import Image
+from pathlib import Path
+from tqdm import tqdm
+
+
+copy_file_failed_fd = open("copy_to_local_image_failed.txt", "w")
 
 
 def get_file_path(content):
@@ -15,30 +22,80 @@ def get_file_path(content):
     second = md5[1:3]
     third = md5[3:6]
     path = "/".join([root_dir, first, second, third, pic_id])
+    my_file = Path(path)
+    if my_file.is_file():
+        content["有效路径"] = path
+        return path
+    else:
+        new_path = "/".join([root_dir, first, second, third, md5])
+        my_file = Path(new_path)
+        if my_file.is_file():
+            content["有效路径"] = new_path
+            return new_path
+        else:
+            content["无效路径"] = path + "\t" + new_path
+            return None
 
-    return path
+
+def copy_image_to_local(content, root_dir):
+    try:
+        Image.open(content["有效路径"])
+        content["本地路径"] = root_dir + "/" + content["有效路径"].split("/")[-1]
+        shutil.copyfile(content["有效路径"], content["本地路径"])
+        return True
+    except Exception:
+        json.dump(content, copy_file_failed_fd, ensure_ascii=False)
+        copy_file_failed_fd.write("\n")
+        return False
+
+
+def write_json_file(file_name, data):
+    with open(file_name, "w") as json_file:
+        json.dump(data, json_file, ensure_ascii=False)
+
+
+def json_contents_to_path(actions, local_files, dir_name):
+    invalid_json = []
+    root_dir = "/home/data/image_data/"
+    json_file = root_dir + dir_name + ".json"
+    json_file_fd = open(json_file, 'w')
+    path_not_exist = 0
+    image_corrupted = 0
+    for content in tqdm(actions):
+        path = get_file_path(content)
+        if path:
+            if copy_image_to_local(content, root_dir=root_dir + "/" + dir_name):
+                json.dump(content, json_file_fd, ensure_ascii=False)
+                json_file_fd.write("\n")
+                local_files.append(content["本地路径"])
+            else:
+                invalid_json.append(content)
+                image_corrupted += 1
+        else:
+            invalid_json.append(content)
+            path_not_exist += 1
+
+    json_file_fd.close()
+
+    print(f"{dir_name},路径非法总数:{path_not_exist},照片损坏总数:{image_corrupted}.")
+
+    with open(root_dir + dir_name + "_failed.json", "w") as json_file:
+        json.dump(invalid_json, json_file, ensure_ascii=False)
 
 
 def get_image_classifier_data(human_action, animal_action, no_action):
     pos_file_list = []
     neg_file_list = []
-
-    for content in human_action:
-        pos_file_list.append(get_file_path(content))
-
-    for content in animal_action:
-        pos_file_list.append(get_file_path(content))
-
-    for content in no_action:
-        neg_file_list.append(get_file_path(content))
-
+    json_contents_to_path(human_action, pos_file_list, "human_images")
+    json_contents_to_path(animal_action, pos_file_list, "animal_images")
+    json_contents_to_path(no_action, neg_file_list, "no_target_images")
     with open('have_target_images.txt', 'w', newline='') as f:
         f.writelines(line + '\n' for line in pos_file_list)
 
     with open('no_target_images.txt', 'w', newline='') as f:
         f.writelines(line + '\n' for line in neg_file_list)
 
-    print("正例照片数量:{},负例照片数量:{}".format(len(pos_file_list), len(neg_file_list)))
+    print("正例照片数量:{},负例照片数量:{}.".format(len(pos_file_list), len(neg_file_list)))
 
 
 if __name__ == '__main__':
@@ -71,3 +128,5 @@ if __name__ == '__main__':
         len(human_action), len(animal_action), len(no_action)))
 
     get_image_classifier_data(human_action, animal_action, no_action)
+
+    copy_file_failed_fd.close()

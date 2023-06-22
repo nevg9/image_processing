@@ -36,4 +36,7 @@ ENV/
 
 *.txt
 *.csv
-
+*.json
+*log
+# pytorch model
+*.pth
