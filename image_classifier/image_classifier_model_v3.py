@@ -14,12 +14,10 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class ImageTransform():
 
-    def __init__(self, resize, mean, std):
+    def __init__(self, mean, std):
         self.data_transform = {
             'train': transforms.Compose([
                 # data augmentation
-                transforms.RandomResizedCrop(
-                    resize, scale=(0.5, 1.0)),
                 transforms.RandomHorizontalFlip(),
                 # convert to tensor for PyTorch
                 transforms.ToTensor(),
@@ -27,7 +25,6 @@ class ImageTransform():
                 transforms.Normalize(mean, std)
             ]),
             'val': transforms.Compose([
-                transforms.CenterCrop(resize),
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std)
             ])
@@ -39,14 +36,12 @@ class ImageTransform():
 
 
 def read_file(file, pos=True):
-    path = ""
-    if pos:
-        path = "/home/data/image_classifier/target/"
-    else:
-        path = "/home/data/image_classifier/no_target/"
     file_list = []
     for line in open(file):
-        file_list.append(path + line.strip().split("/")[-1])
+        row = line.strip()
+        if row == "":
+            continue
+        file_list.append(row)
 
     return file_list
 
@@ -69,8 +64,8 @@ def split_train_and_val(path_file, train_ratio, pos=True):
 class forestDataset(data.Dataset):
 
     def __init__(self, pos_file_list, neg_file_list, transform=None, phase='train'):
-        self.pos_file_list = self.check_image_invalid(pos_file_list, True)
-        self.neg_file_list = self.check_image_invalid(neg_file_list, False)
+        self.pos_file_list = pos_file_list
+        self.neg_file_list = neg_file_list
         self.total_file_list = self.pos_file_list + self.neg_file_list
         self.transform = transform
         self.phase = phase
@@ -116,18 +111,6 @@ class forestDataset(data.Dataset):
         label = int(img_path in self.pos_file_list)
 
         return img_transformed, label
-
-
-# 模型结构定义
-def get_pretrain_model():
-    use_pretrained = True
-    net = models.vgg16(pretrained=use_pretrained)
-
-    # Replace output layer for 2 class classifier,
-    net.classifier[6] = nn.Linear(in_features=4096, out_features=2)
-
-    net.train()
-    return net
 
 # training function
 
@@ -204,6 +187,17 @@ def train_model(net, dataloaders_dict, criterion, optimizer, num_epochs):
     return accuracy_list, loss_list
 
 
+def get_pretrain_model():
+    use_pretrained = True
+    net = models.vgg16_bn(pretrained=use_pretrained)
+
+    # Replace output layer for 2 class classifier,
+    net.classifier[6] = nn.Linear(in_features=4096, out_features=2)
+
+    net.train()
+    return net
+
+
 size = 256
 mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
@@ -211,22 +205,22 @@ std = (0.229, 0.224, 0.225)
 train_ratio = 0.9
 
 train_pos_file_list, val_pos_file_list = split_train_and_val(
-    path_file="../have_target_images.txt", train_ratio=train_ratio, pos=True)
+    path_file="./have_target_images.txt", train_ratio=train_ratio, pos=True)
 train_neg_file_list, val_neg_file_list = split_train_and_val(
-    path_file="../no_target_images.txt", train_ratio=train_ratio, pos=False)
+    path_file="./no_target_images.txt", train_ratio=train_ratio, pos=False)
 
 train_dataset = forestDataset(train_pos_file_list, train_neg_file_list,
-                              transform=ImageTransform(size, mean, std), phase='train')
+                              transform=ImageTransform(mean, std), phase='train')
 val_dataset = forestDataset(val_pos_file_list, val_neg_file_list,
-                            transform=ImageTransform(size, mean, std), phase='val')
+                            transform=ImageTransform(mean, std), phase='val')
 
 batch_size = 32
 
 train_dataloader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=28, prefetch_factor=3, drop_last=False)
+    train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=28, prefetch_factor=10, drop_last=False)
 
 val_dataloader = torch.utils.data.DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=28, prefetch_factor=2, drop_last=False)
+    val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=28, prefetch_factor=10, drop_last=False)
 
 # put dataloader into dictionary type
 dataloaders_dict = {"train": train_dataloader, "val": val_dataloader}
@@ -234,9 +228,7 @@ dataloaders_dict = {"train": train_dataloader, "val": val_dataloader}
 # 使用vgg16预训练模型
 # load pretrained vgg16 from PyTorch as an instance
 # need to make setting 'internet' to 'On'.
-
 net = get_pretrain_model()
-
 # setting of loss function
 criterion = nn.CrossEntropyLoss()
 
@@ -287,4 +279,4 @@ num_epochs = 10
 accuracy_list, loss_list = train_model(
     net, dataloaders_dict, criterion, optimizer, num_epochs=num_epochs)
 
-torch.save(net.state_dict, "image_classifier_model_v1.pth")
+torch.save(net.state_dict, "image_classifier_model_vgg16bn_v3.pth")

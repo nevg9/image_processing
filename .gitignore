@@ -40,3 +40,4 @@ ENV/
 *log
 # pytorch model
 *.pth
+*logs
