@@ -11,3 +11,5 @@ python ./image_classifier/get_classifier_data.py -m /hpc_input_export/人为活�
 ```
 
 该脚本能够把存储在服务器上的图片下载到本地（且检查对应的图片是否损坏）。对应的每个大类的图片的说明会保留在对应的本地路径的json文件
+
+### 模型训练
